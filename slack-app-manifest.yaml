@@ -23,11 +23,13 @@ oauth_config:
   redirect_urls:
     - http://localhost:3000/api/oauth/slack
   scopes:
-    bot:
+    user:
       - channels:history
       - channels:read
       - groups:history
       - groups:read
+      - im:history
+      - mpim:history
       - users:read
       - team:read
 

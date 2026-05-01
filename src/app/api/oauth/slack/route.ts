@@ -24,18 +24,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const scopes = [
+    // Use user_scope instead of scope to get user token (access to all user's channels)
+    const userScopes = [
       "channels:history",
       "channels:read",
       "groups:history",
       "groups:read",
+      "im:history",
+      "mpim:history",
       "users:read",
       "team:read",
     ].join(",");
 
     const slackAuthUrl = new URL("https://slack.com/oauth/v2/authorize");
     slackAuthUrl.searchParams.set("client_id", clientId);
-    slackAuthUrl.searchParams.set("scope", scopes);
+    slackAuthUrl.searchParams.set("user_scope", userScopes);
     slackAuthUrl.searchParams.set("redirect_uri", redirectUri);
 
     return NextResponse.redirect(slackAuthUrl.toString());
@@ -71,12 +74,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Use user token (authed_user.access_token) for user-level access
+    const accessToken = tokenData.authed_user?.access_token || tokenData.access_token;
+
+    if (!accessToken) {
+      console.error("No access token in response:", tokenData);
+      return NextResponse.redirect(
+        new URL("/dashboard/tools?error=slack_token_failed", request.url)
+      );
+    }
+
     // Store token and team info in cookies
     const response = NextResponse.redirect(
       new URL("/dashboard/tools?slack=connected", request.url)
     );
 
-    response.cookies.set("slack_access_token", tokenData.access_token, {
+    response.cookies.set("slack_access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
