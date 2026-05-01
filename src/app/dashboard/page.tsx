@@ -7,19 +7,19 @@ interface AutomatedTask {
   title: string;
   description: string;
   frequency: string;
-  enabled?: boolean;
+  enabled: boolean;
 }
 
 interface CompanyData {
   userName?: string;
   companyName?: string;
-  companyType?: string;
   teamSize?: string;
   selectedAgent?: string;
   automatedTasks?: AutomatedTask[];
   research?: {
     description: string;
     industry: string;
+    insights?: string[];
   };
 }
 
@@ -60,21 +60,25 @@ export default function Dashboard() {
   const [audit, setAudit] = useState<SlackAudit | null>(null);
   const [auditing, setAuditing] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [suggestedTasks, setSuggestedTasks] = useState<AutomatedTask[]>([]);
+  const [generatingTasks, setGeneratingTasks] = useState(false);
+  const [tasksConfigured, setTasksConfigured] = useState(false);
 
   useEffect(() => {
-    // Load company data from localStorage
     const saved = localStorage.getItem("teampulse_company");
     if (saved) {
-      setCompanyData(JSON.parse(saved));
+      const data = JSON.parse(saved);
+      setCompanyData(data);
+      if (data.automatedTasks && data.automatedTasks.length > 0) {
+        setTasksConfigured(true);
+      }
     }
 
-    // Load cached audit if exists
     const cachedAudit = localStorage.getItem("teampulse_audit");
     if (cachedAudit) {
       setAudit(JSON.parse(cachedAudit));
     }
 
-    // Check Slack connection status
     checkSlackStatus();
   }, []);
 
@@ -104,6 +108,9 @@ export default function Dashboard() {
         const data = await res.json();
         setAudit(data);
         localStorage.setItem("teampulse_audit", JSON.stringify(data));
+
+        // Auto-generate task suggestions after audit
+        generateTaskSuggestions(data);
       } else {
         const error = await res.json();
         setAuditError(error.error || "Audit failed");
@@ -115,12 +122,54 @@ export default function Dashboard() {
     }
   };
 
+  const generateTaskSuggestions = async (auditData: SlackAudit) => {
+    setGeneratingTasks(true);
+    try {
+      const res = await fetch("/api/tasks/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audit: auditData,
+          research: companyData?.research,
+          companyName: companyData?.companyName,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tasks) {
+          setSuggestedTasks(
+            data.tasks.map((t: Omit<AutomatedTask, 'enabled'>) => ({ ...t, enabled: true }))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to generate task suggestions:", error);
+    } finally {
+      setGeneratingTasks(false);
+    }
+  };
+
+  const toggleTask = (taskId: string) => {
+    setSuggestedTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, enabled: !t.enabled } : t))
+    );
+  };
+
+  const saveTasks = () => {
+    const enabledTasks = suggestedTasks.filter((t) => t.enabled);
+    const updated = { ...companyData, automatedTasks: enabledTasks };
+    localStorage.setItem("teampulse_company", JSON.stringify(updated));
+    setCompanyData(updated);
+    setTasksConfigured(true);
+  };
+
   const firstName = companyData?.userName?.split(" ")[0] || "there";
   const tasks = companyData?.automatedTasks || [];
 
-  // Checklist state
   const slackConnected = slackStatus?.connected || false;
   const auditComplete = audit !== null;
+  const setupComplete = slackConnected && auditComplete && tasksConfigured;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -136,7 +185,7 @@ export default function Dashboard() {
       </div>
 
       {/* Setup Checklist */}
-      {(!slackConnected || !auditComplete) && (
+      {!setupComplete && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-8">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Setup Checklist</h2>
           <div className="space-y-4">
@@ -222,11 +271,106 @@ export default function Dashboard() {
               )}
             </div>
 
+            {/* Step 3: Configure Tasks */}
+            <div className={`flex items-center gap-4 p-4 rounded-xl ${
+              !auditComplete ? "bg-slate-50 opacity-50" : tasksConfigured ? "bg-green-50" : "bg-purple-50"
+            }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                tasksConfigured ? "bg-green-500 text-white" : auditComplete ? "bg-purple-500 text-white" : "bg-slate-200 text-slate-500"
+              }`}>
+                {generatingTasks ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : tasksConfigured ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <span className="text-sm font-medium">3</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className={`font-medium ${
+                  tasksConfigured ? "text-green-800" : auditComplete ? "text-purple-800" : "text-slate-500"
+                }`}>
+                  Configure Tasks
+                </h3>
+                <p className={`text-sm ${
+                  tasksConfigured ? "text-green-600" : auditComplete ? "text-purple-600" : "text-slate-400"
+                }`}>
+                  {generatingTasks
+                    ? "Analyzing your workspace and generating suggestions..."
+                    : tasksConfigured
+                    ? `${tasks.length} tasks configured`
+                    : "Review and enable automated tasks based on your workspace"}
+                </p>
+              </div>
+            </div>
+
             {auditError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-700">{auditError}</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Suggested Tasks (after audit, before configuration) */}
+      {auditComplete && !tasksConfigured && suggestedTasks.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Suggested Tasks</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Based on your Slack workspace and company profile
+              </p>
+            </div>
+            <button
+              onClick={saveTasks}
+              disabled={suggestedTasks.filter((t) => t.enabled).length === 0}
+              className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
+            >
+              Save Tasks ({suggestedTasks.filter((t) => t.enabled).length})
+            </button>
+          </div>
+          <div className="space-y-3">
+            {suggestedTasks.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => toggleTask(task.id)}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left border ${
+                  task.enabled
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "bg-white border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                  task.enabled ? "bg-white border-white" : "border-slate-300"
+                }`}>
+                  {task.enabled && (
+                    <svg className="w-3 h-3 text-slate-900" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className={`font-medium ${task.enabled ? "text-white" : "text-slate-900"}`}>
+                      {task.title}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      task.enabled ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-500"
+                    }`}>
+                      {task.frequency}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-0.5 ${task.enabled ? "text-slate-300" : "text-slate-500"}`}>
+                    {task.description}
+                  </p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -304,8 +448,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Automated Tasks */}
-      {tasks.length > 0 && (
+      {/* Configured Tasks */}
+      {tasksConfigured && tasks.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
@@ -335,16 +479,6 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {slackConnected && auditComplete && tasks.length === 0 && (
-        <div className="bg-slate-50 rounded-2xl p-8 text-center">
-          <p className="text-slate-500">No automated tasks configured yet.</p>
-          <p className="text-sm text-slate-400 mt-1">
-            Go through onboarding to set up your first tasks.
-          </p>
         </div>
       )}
     </div>
