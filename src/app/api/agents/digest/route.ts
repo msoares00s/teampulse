@@ -23,22 +23,24 @@ interface SlackUser {
   name: string;
 }
 
-async function fetchSlackData(token: string) {
+async function fetchSlackData(token: string): Promise<{ messages: { channel: string; user: string; text: string; ts: string }[]; debug: string }> {
   const messages: { channel: string; user: string; text: string; ts: string }[] = [];
   const userCache: Record<string, string> = {};
+  const debugInfo: string[] = [];
 
-  // Fetch channels
-  const channelsRes = await fetch("https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=20", {
+  // Fetch channels the bot is a member of
+  const channelsRes = await fetch("https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true&limit=50", {
     headers: { Authorization: `Bearer ${token}` },
   });
   const channelsData = await channelsRes.json();
 
   if (!channelsData.ok) {
-    console.error("Failed to fetch channels:", channelsData.error);
-    return [];
+    debugInfo.push(`Channels error: ${channelsData.error}`);
+    return { messages: [], debug: debugInfo.join("; ") };
   }
 
   const channels: SlackChannel[] = channelsData.channels || [];
+  debugInfo.push(`Found ${channels.length} channels`);
 
   // Fetch users for name lookup
   const usersRes = await fetch("https://slack.com/api/users.list?limit=100", {
@@ -63,28 +65,35 @@ async function fetchSlackData(token: string) {
       );
       const historyData = await historyRes.json();
 
-      if (historyData.ok && historyData.messages) {
-        for (const msg of historyData.messages as SlackMessage[]) {
-          if (msg.text && !msg.text.startsWith("<") && msg.text.length > 10) {
-            const userName = userCache[msg.user] || "Unknown";
-            const timestamp = new Date(parseFloat(msg.ts) * 1000);
-            const timeAgo = getTimeAgo(timestamp);
+      if (!historyData.ok) {
+        debugInfo.push(`#${channel.name}: ${historyData.error}`);
+        continue;
+      }
 
-            messages.push({
-              channel: `#${channel.name}`,
-              user: userName,
-              text: msg.text.substring(0, 500),
-              ts: timeAgo,
-            });
-          }
+      const channelMessages = historyData.messages || [];
+      debugInfo.push(`#${channel.name}: ${channelMessages.length} messages`);
+
+      for (const msg of channelMessages as SlackMessage[]) {
+        if (msg.text && msg.text.length > 5) {
+          const userName = userCache[msg.user] || msg.user || "Unknown";
+          const timestamp = new Date(parseFloat(msg.ts) * 1000);
+          const timeAgo = getTimeAgo(timestamp);
+
+          messages.push({
+            channel: `#${channel.name}`,
+            user: userName,
+            text: msg.text.substring(0, 500),
+            ts: timeAgo,
+          });
         }
       }
     } catch (err) {
+      debugInfo.push(`#${channel.name}: fetch error`);
       console.error(`Failed to fetch history for ${channel.name}:`, err);
     }
   }
 
-  return messages.slice(0, 100);
+  return { messages: messages.slice(0, 100), debug: debugInfo.join("; ") };
 }
 
 function getTimeAgo(date: Date): string {
@@ -109,11 +118,15 @@ export async function POST(request: NextRequest) {
     let messagesText: string;
 
     if (slackToken) {
-      const slackMessages = await fetchSlackData(slackToken);
+      const { messages: slackMessages, debug } = await fetchSlackData(slackToken);
+      console.log("Slack debug:", debug);
+
       if (slackMessages.length > 0) {
         messagesText = slackMessages.map((m) => `[${m.channel}] ${m.user} (${m.ts}): ${m.text}`).join("\n");
       } else {
-        return NextResponse.json({ error: "No messages found in Slack channels" }, { status: 400 });
+        return NextResponse.json({
+          error: `No messages found. Debug: ${debug}. Make sure the TeamPulse bot is added to your Slack channels.`
+        }, { status: 400 });
       }
     } else {
       return NextResponse.json({ error: "Slack not connected. Please connect Slack first." }, { status: 401 });
