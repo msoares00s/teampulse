@@ -205,8 +205,8 @@ export default function Home() {
             <Image
               src="/logo.svg"
               alt="TeamPulse"
-              width={220}
-              height={44}
+              width={440}
+              height={88}
               priority
             />
           </div>
