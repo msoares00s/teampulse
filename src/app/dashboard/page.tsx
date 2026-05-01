@@ -148,60 +148,76 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Active Automations */}
-      {companyData?.automatedTasks && companyData.automatedTasks.length > 0 && (
-        <div className="bg-slate-50 rounded-2xl p-6 mb-8">
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">
-            Active Automations
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {companyData.automatedTasks.map((task) => (
-              <span
-                key={task.id}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm text-slate-700 border border-slate-200"
-              >
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                {task.title}
-                <span className="text-slate-400 text-xs">· {task.frequency}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Getting Started Checklist */}
+      {!review && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-8">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Getting Started</h2>
+          <div className="space-y-4">
+            {/* Step 1: Connect Slack */}
+            <div className={`flex items-center gap-4 p-4 rounded-xl ${slackConnected ? 'bg-green-50' : 'bg-slate-50'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                slackConnected ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {slackConnected ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <span className="text-sm font-medium">1</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className={`font-medium ${slackConnected ? 'text-green-800' : 'text-slate-900'}`}>
+                  Connect Slack
+                </h3>
+                <p className={`text-sm ${slackConnected ? 'text-green-600' : 'text-slate-500'}`}>
+                  {slackConnected ? 'Connected and ready to analyze' : 'Allow TeamPulse to read your team\'s messages'}
+                </p>
+              </div>
+              {!slackConnected && (
+                <button
+                  onClick={connectSlack}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
+                >
+                  Connect
+                </button>
+              )}
+            </div>
 
-      {/* Connection CTA */}
-      {!slackConnected && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center mb-8">
-          <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-            </svg>
+            {/* Step 2: Generate Review */}
+            <div className={`flex items-center gap-4 p-4 rounded-xl ${
+              !slackConnected ? 'bg-slate-50 opacity-50' : review ? 'bg-green-50' : 'bg-blue-50'
+            }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                review ? 'bg-green-500 text-white' : slackConnected ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {review ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <span className="text-sm font-medium">2</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className={`font-medium ${review ? 'text-green-800' : slackConnected ? 'text-blue-800' : 'text-slate-500'}`}>
+                  Generate your first review
+                </h3>
+                <p className={`text-sm ${review ? 'text-green-600' : slackConnected ? 'text-blue-600' : 'text-slate-400'}`}>
+                  {review ? 'Review generated successfully' : 'Analyze your team\'s activity from the past week'}
+                </p>
+              </div>
+              {slackConnected && !review && (
+                <button
+                  onClick={generateReview}
+                  disabled={generating}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {generating ? 'Generating...' : 'Generate'}
+                </button>
+              )}
+            </div>
           </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Connect Slack to get started</h2>
-          <p className="text-slate-500 mb-6 max-w-sm mx-auto">
-            TeamPulse will analyze your team&apos;s Slack activity to generate weekly management reviews.
-          </p>
-          <button
-            onClick={connectSlack}
-            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800"
-          >
-            Connect Slack
-          </button>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {slackConnected && !review && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
-            </svg>
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">Ready to generate your first review</h2>
-          <p className="text-slate-500 mb-6 max-w-sm mx-auto">
-            Click the button above to analyze your team&apos;s activity and create a structured weekly review.
-          </p>
         </div>
       )}
 
