@@ -40,14 +40,25 @@ export default function Dashboard() {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
 
   useEffect(() => {
-    const slackToken = localStorage.getItem("slackToken");
-    if (slackToken) setSlackConnected(true);
-
     const params = new URLSearchParams(window.location.search);
+
+    // Check for OAuth callback
     if (params.get("slack") === "connected") {
       setSlackConnected(true);
-      localStorage.setItem("slackToken", "connected");
+      localStorage.setItem("slackConnected", "true");
       window.history.replaceState({}, "", "/dashboard");
+    } else {
+      // Check if we have a real connection (cookie set by OAuth)
+      const hasSlackCookie = document.cookie.includes("slack_access_token");
+      const wasConnected = localStorage.getItem("slackConnected") === "true";
+
+      if (hasSlackCookie || wasConnected) {
+        setSlackConnected(true);
+      } else {
+        // Clear any old demo tokens
+        localStorage.removeItem("slackToken");
+        localStorage.removeItem("slackConnected");
+      }
     }
 
     const saved = localStorage.getItem("teampulse_review");

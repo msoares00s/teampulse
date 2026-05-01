@@ -92,7 +92,7 @@ function ToolsContent() {
     }
 
     if (slackConnected) {
-      localStorage.setItem("slackToken", "connected");
+      localStorage.setItem("slackConnected", "true");
       const teamName = document.cookie
         .split("; ")
         .find((row) => row.startsWith("slack_team_name="))
@@ -104,10 +104,14 @@ function ToolsContent() {
         )
       );
       window.history.replaceState({}, "", "/dashboard/tools");
+      return;
     }
 
-    const slackToken = localStorage.getItem("slackToken");
-    if (slackToken) {
+    // Check for existing connection
+    const hasSlackCookie = document.cookie.includes("slack_access_token");
+    const wasConnected = localStorage.getItem("slackConnected") === "true";
+
+    if (hasSlackCookie || wasConnected) {
       const teamName = document.cookie
         .split("; ")
         .find((row) => row.startsWith("slack_team_name="))
@@ -132,6 +136,7 @@ function ToolsContent() {
 
   const disconnectTool = (id: string) => {
     if (id === "slack") {
+      localStorage.removeItem("slackConnected");
       localStorage.removeItem("slackToken");
       document.cookie = "slack_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
       document.cookie = "slack_team_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
