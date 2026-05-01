@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   // Handle OAuth errors from Slack
   if (error) {
     return NextResponse.redirect(
-      new URL("/dashboard/tools?error=slack_denied", request.url)
+      new URL("/dashboard?error=slack_denied", request.url)
     );
   }
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   if (!code) {
     if (!clientId) {
       return NextResponse.redirect(
-        new URL("/dashboard/tools?error=slack_not_configured", request.url)
+        new URL("/dashboard?error=slack_not_configured", request.url)
       );
     }
 
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   try {
     if (!clientId || !clientSecret) {
       return NextResponse.redirect(
-        new URL("/dashboard/tools?error=slack_not_configured", request.url)
+        new URL("/dashboard?error=slack_not_configured", request.url)
       );
     }
 
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     if (!tokenData.ok) {
       console.error("Slack OAuth error:", tokenData);
       return NextResponse.redirect(
-        new URL("/dashboard/tools?error=slack_token_failed", request.url)
+        new URL("/dashboard?error=slack_token_failed", request.url)
       );
     }
 
@@ -80,13 +80,13 @@ export async function GET(request: NextRequest) {
     if (!accessToken) {
       console.error("No access token in response:", tokenData);
       return NextResponse.redirect(
-        new URL("/dashboard/tools?error=slack_token_failed", request.url)
+        new URL("/dashboard?error=slack_token_failed", request.url)
       );
     }
 
     // Store token and team info in cookies
     const response = NextResponse.redirect(
-      new URL("/dashboard/tools?slack=connected", request.url)
+      new URL("/dashboard?slack=connected", request.url)
     );
 
     response.cookies.set("slack_access_token", accessToken, {
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("Slack OAuth error:", err);
     return NextResponse.redirect(
-      new URL("/dashboard/tools?error=slack_failed", request.url)
+      new URL("/dashboard?error=slack_failed", request.url)
     );
   }
 }
