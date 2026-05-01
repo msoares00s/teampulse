@@ -1,27 +1,123 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const DEMO_MESSAGES = [
-  { channel: "#general", user: "Sarah", text: "Just shipped the new dashboard feature! It's live in production now.", ts: "2h ago" },
-  { channel: "#engineering", user: "Mike", text: "Found a performance issue in the API - response times spiking to 2s. Need to investigate.", ts: "5h ago" },
-  { channel: "#engineering", user: "Mike", text: "Fixed the performance issue! It was a missing database index. Down to 50ms now.", ts: "4h ago" },
-  { channel: "#sales", user: "Lisa", text: "Closed the Acme Corp deal! $50k ARR. They want to start onboarding next week.", ts: "1d ago" },
-  { channel: "#general", user: "Tom", text: "Reminder: All-hands meeting tomorrow at 3pm. We'll be discussing Q2 goals.", ts: "2d ago" },
-  { channel: "#product", user: "Emma", text: "User research sessions went great! Key insight: customers want better mobile support.", ts: "3d ago" },
-  { channel: "#engineering", user: "Sarah", text: "CI pipeline is flaky again. Third time this week. We should prioritize fixing this.", ts: "4d ago" },
-  { channel: "#sales", user: "Lisa", text: "Pipeline looking strong for Q2. We have 5 deals in final negotiation stages.", ts: "5d ago" },
-  { channel: "#product", user: "Tom", text: "Still waiting on legal review for the new terms of service. Been 2 weeks now.", ts: "3d ago" },
-  { channel: "#engineering", user: "Mike", text: "Should we migrate to the new auth provider? Need a decision by Friday.", ts: "2d ago" },
-];
+interface SlackChannel {
+  id: string;
+  name: string;
+}
+
+interface SlackMessage {
+  user: string;
+  text: string;
+  ts: string;
+}
+
+interface SlackUser {
+  id: string;
+  real_name?: string;
+  name: string;
+}
+
+async function fetchSlackData(token: string) {
+  const messages: { channel: string; user: string; text: string; ts: string }[] = [];
+  const userCache: Record<string, string> = {};
+
+  // Fetch channels
+  const channelsRes = await fetch("https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=20", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const channelsData = await channelsRes.json();
+
+  if (!channelsData.ok) {
+    console.error("Failed to fetch channels:", channelsData.error);
+    return [];
+  }
+
+  const channels: SlackChannel[] = channelsData.channels || [];
+
+  // Fetch users for name lookup
+  const usersRes = await fetch("https://slack.com/api/users.list?limit=100", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const usersData = await usersRes.json();
+
+  if (usersData.ok && usersData.members) {
+    for (const user of usersData.members as SlackUser[]) {
+      userCache[user.id] = user.real_name || user.name;
+    }
+  }
+
+  // Fetch recent messages from each channel (last 7 days)
+  const oneWeekAgo = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+
+  for (const channel of channels.slice(0, 10)) {
+    try {
+      const historyRes = await fetch(
+        `https://slack.com/api/conversations.history?channel=${channel.id}&oldest=${oneWeekAgo}&limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const historyData = await historyRes.json();
+
+      if (historyData.ok && historyData.messages) {
+        for (const msg of historyData.messages as SlackMessage[]) {
+          if (msg.text && !msg.text.startsWith("<") && msg.text.length > 10) {
+            const userName = userCache[msg.user] || "Unknown";
+            const timestamp = new Date(parseFloat(msg.ts) * 1000);
+            const timeAgo = getTimeAgo(timestamp);
+
+            messages.push({
+              channel: `#${channel.name}`,
+              user: userName,
+              text: msg.text.substring(0, 500),
+              ts: timeAgo,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to fetch history for ${channel.name}:`, err);
+    }
+  }
+
+  return messages.slice(0, 100);
+}
+
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHours > 0) return `${diffHours}h ago`;
+  return "just now";
+}
 
 export async function POST(request: NextRequest) {
   try {
     const { companyContext } = await request.json();
-    const messagesText = DEMO_MESSAGES.map((m) => `[${m.channel}] ${m.user} (${m.ts}): ${m.text}`).join("\n");
+
+    // Get Slack token from cookie
+    const cookieStore = await cookies();
+    const slackToken = cookieStore.get("slack_access_token")?.value;
+
+    let messagesText: string;
+
+    if (slackToken) {
+      const slackMessages = await fetchSlackData(slackToken);
+      if (slackMessages.length > 0) {
+        messagesText = slackMessages.map((m) => `[${m.channel}] ${m.user} (${m.ts}): ${m.text}`).join("\n");
+      } else {
+        return NextResponse.json({ error: "No messages found in Slack channels" }, { status: 400 });
+      }
+    } else {
+      return NextResponse.json({ error: "Slack not connected. Please connect Slack first." }, { status: 401 });
+    }
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
