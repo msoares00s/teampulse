@@ -97,8 +97,7 @@ Format the response as JSON:
   "keyTopics": ["topic 1", "topic 2", "topic 3"],
   "highlights": ["highlight 1", "highlight 2"],
   "concerns": ["concern 1", "concern 2"],
-  "recommendations": ["recommendation 1", "recommendation 2"],
-  "generatedAt": "${new Date().toISOString()}"
+  "recommendations": ["recommendation 1", "recommendation 2"]
 }`,
       },
     ],
@@ -107,7 +106,9 @@ Format the response as JSON:
   const content = message.content[0];
   if (content.type === "text") {
     try {
-      return JSON.parse(content.text);
+      const result = JSON.parse(content.text);
+      result.generatedAt = new Date().toISOString();
+      return result;
     } catch {
       throw new Error("Failed to parse digest response as JSON");
     }

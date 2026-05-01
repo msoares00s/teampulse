@@ -168,8 +168,7 @@ Respond ONLY with valid JSON:
     {"text": "Decision needed", "source": "Slack #channel", "action": "Options to consider"}
   ],
   "teamUpdate": "Draft team update text...",
-  "meetingAgenda": ["Agenda item 1", "Agenda item 2"],
-  "generatedAt": "${new Date().toISOString()}"
+  "meetingAgenda": ["Agenda item 1", "Agenda item 2"]
 }
 
 Be specific, actionable, and reference actual people and channels. Prioritize by business impact.`,
@@ -188,7 +187,9 @@ Be specific, actionable, and reference actual people and channels. Prioritize by
           jsonText = jsonMatch[1].trim();
         }
 
-        return NextResponse.json(JSON.parse(jsonText));
+        const review = JSON.parse(jsonText);
+        review.generatedAt = new Date().toISOString();
+        return NextResponse.json(review);
       } catch (parseError) {
         console.error("Failed to parse response:", content.text);
         console.error("Parse error:", parseError);
