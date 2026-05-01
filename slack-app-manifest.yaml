@@ -1,0 +1,37 @@
+display_information:
+  name: TeamPulse
+  description: AI-powered weekly management reviews. Get insights on follow-ups, blockers, and team alignment.
+  long_description: |
+    TeamPulse helps founders and managers of small teams (5-50 people) stay on top of what matters.
+
+    Connect your Slack workspace and TeamPulse will:
+    - Generate weekly management reviews
+    - Surface missed follow-ups
+    - Detect blockers slowing your team down
+    - Track pending decisions that need your input
+    - Draft team updates and meeting agendas
+
+    Built for agencies, consultancies, studios, and bootstrapped companies who need operating rhythm without the overhead.
+  background_color: "#0f172a"
+
+features:
+  bot_user:
+    display_name: TeamPulse
+    always_online: true
+
+oauth_config:
+  redirect_urls:
+    - http://localhost:3000/api/oauth/slack
+  scopes:
+    bot:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - users:read
+      - team:read
+
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
