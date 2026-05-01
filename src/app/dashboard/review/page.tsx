@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import InsightCard from "@/components/InsightCard";
 
 interface Review {
@@ -25,11 +25,9 @@ interface TaskExecution {
   taskId: string;
   executedAt: string;
   message: string;
-  slackResult?: {
-    success: boolean;
-    channel?: string;
-    error?: string;
-  };
+  success: boolean;
+  channel?: string;
+  error?: string;
 }
 
 export default function ReviewPage() {
@@ -41,37 +39,11 @@ export default function ReviewPage() {
   const [selectedTask, setSelectedTask] = useState<AutomatedTask | null>(null);
   const [taskChannel, setTaskChannel] = useState("");
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
   const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
   const [companyName, setCompanyName] = useState("");
 
-  useEffect(() => {
-    const saved = localStorage.getItem("teampulse_review");
-    if (saved) setReview(JSON.parse(saved));
-
-    const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
-    if (company.automatedTasks) {
-      setTasks(company.automatedTasks);
-    }
-    if (company.companyName) {
-      setCompanyName(company.companyName);
-    }
-
-    const savedExecutions = localStorage.getItem("teampulse_executions");
-    if (savedExecutions) {
-      setExecutions(JSON.parse(savedExecutions));
-    }
-
-    // Load channels from audit
-    const audit = localStorage.getItem("teampulse_audit");
-    if (audit) {
-      const auditData = JSON.parse(audit);
-      if (auditData.channels) {
-        setChannels(auditData.channels);
-      }
-    }
-  }, []);
-
-  const generateReview = async () => {
+  const generateReview = useCallback(async () => {
     setGenerating(true);
     try {
       const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
@@ -89,19 +61,57 @@ export default function ReviewPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setReview(data);
-        localStorage.setItem("teampulse_review", JSON.stringify(data));
+        if (!data.error) {
+          setReview(data);
+          localStorage.setItem("teampulse_review", JSON.stringify(data));
+        }
       }
     } catch (error) {
       console.error("Failed to generate review:", error);
     } finally {
       setGenerating(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("teampulse_review");
+    if (saved) {
+      setReview(JSON.parse(saved));
+    }
+
+    const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
+    if (company.automatedTasks) {
+      setTasks(company.automatedTasks);
+    }
+    if (company.companyName) {
+      setCompanyName(company.companyName);
+    }
+
+    const savedExecutions = localStorage.getItem("teampulse_executions");
+    if (savedExecutions) {
+      setExecutions(JSON.parse(savedExecutions));
+    }
+
+    const audit = localStorage.getItem("teampulse_audit");
+    if (audit) {
+      const auditData = JSON.parse(audit);
+      if (auditData.channels) {
+        setChannels(auditData.channels);
+      }
+    }
+
+    // Auto-generate review if Slack is connected and no review exists
+    const hasSlack = document.cookie.includes("slack_access_token") ||
+                     localStorage.getItem("slackConnected") === "true";
+    if (!saved && hasSlack) {
+      generateReview();
+    }
+  }, [generateReview]);
 
   const executeTask = async (task: AutomatedTask, postToSlack: boolean = false) => {
     setExecutingTask(task.id);
     setPreviewMessage(null);
+    setTaskError(null);
 
     try {
       const res = await fetch("/api/tasks/execute", {
@@ -119,26 +129,36 @@ export default function ReviewPage() {
         const data = await res.json();
 
         if (postToSlack) {
-          // Save execution record
-          const execution: TaskExecution = {
-            taskId: task.id,
-            executedAt: data.executedAt,
-            message: data.message,
-            slackResult: data.slackResult,
-          };
+          if (data.slackResult?.success) {
+            // Only save as executed if Slack post succeeded
+            const execution: TaskExecution = {
+              taskId: task.id,
+              executedAt: data.executedAt,
+              message: data.message,
+              success: true,
+              channel: data.slackResult.channel,
+            };
 
-          const newExecutions = { ...executions, [task.id]: execution };
-          setExecutions(newExecutions);
-          localStorage.setItem("teampulse_executions", JSON.stringify(newExecutions));
-          setSelectedTask(null);
-          setTaskChannel("");
+            const newExecutions = { ...executions, [task.id]: execution };
+            setExecutions(newExecutions);
+            localStorage.setItem("teampulse_executions", JSON.stringify(newExecutions));
+            setSelectedTask(null);
+            setTaskChannel("");
+            setPreviewMessage(null);
+          } else {
+            // Show error
+            setTaskError(data.slackResult?.error || "Failed to post to Slack. Make sure you have reconnected Slack with write permissions.");
+          }
         } else {
-          // Just preview
           setPreviewMessage(data.message);
         }
+      } else {
+        const error = await res.json();
+        setTaskError(error.error || "Failed to execute task");
       }
     } catch (error) {
       console.error("Failed to execute task:", error);
+      setTaskError("Failed to connect to server");
     } finally {
       setExecutingTask(null);
     }
@@ -170,20 +190,11 @@ export default function ReviewPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Weekly Review</h1>
-          <p className="text-slate-500 mt-1">
-            {review ? formatDate(review.generatedAt) : "Generate your first review"}
-          </p>
-        </div>
-        <button
-          onClick={generateReview}
-          disabled={generating}
-          className="px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
-        >
-          {generating ? "Generating..." : review ? "Regenerate" : "Generate Review"}
-        </button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Weekly Review</h1>
+        <p className="text-slate-500 mt-1">
+          {review ? formatDate(review.generatedAt) : generating ? "Generating..." : "Your weekly management overview"}
+        </p>
       </div>
 
       {/* Automated Tasks Section */}
@@ -209,28 +220,29 @@ export default function ReviewPage() {
                         <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs">
                           {task.frequency}
                         </span>
-                        {execution && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
-                            Executed
+                        {execution?.success && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            Posted
                           </span>
                         )}
                       </div>
                       <p className="text-sm text-slate-500">{task.description}</p>
-                      {execution && (
+                      {execution?.success && (
                         <p className="text-xs text-slate-400 mt-2">
                           Last run: {formatTime(execution.executedAt)}
-                          {execution.slackResult?.success && (
-                            <span className="text-green-600 ml-2">
-                              Posted to #{execution.slackResult.channel}
-                            </span>
-                          )}
+                          <span className="text-green-600 ml-2">
+                            in #{execution.channel}
+                          </span>
                         </p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 ml-4">
                       {selectedTask?.id === task.id ? (
                         <button
-                          onClick={() => { setSelectedTask(null); setPreviewMessage(null); setTaskChannel(""); }}
+                          onClick={() => { setSelectedTask(null); setPreviewMessage(null); setTaskChannel(""); setTaskError(null); }}
                           className="px-3 py-1.5 text-slate-500 text-sm hover:text-slate-700"
                         >
                           Cancel
@@ -241,6 +253,7 @@ export default function ReviewPage() {
                             setSelectedTask(task);
                             setTaskChannel(channelInDescription || "");
                             setPreviewMessage(null);
+                            setTaskError(null);
                           }}
                           className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
                         >
@@ -256,7 +269,7 @@ export default function ReviewPage() {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Post to channel (optional)
+                            Post to channel
                           </label>
                           <select
                             value={taskChannel}
@@ -272,13 +285,22 @@ export default function ReviewPage() {
                           </select>
                         </div>
 
+                        {taskError && (
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-sm text-red-700">{taskError}</p>
+                            <p className="text-xs text-red-500 mt-1">
+                              You may need to reconnect Slack to get write permissions.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="flex gap-2">
                           <button
                             onClick={() => executeTask(task, false)}
                             disabled={executingTask === task.id}
                             className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 disabled:opacity-50"
                           >
-                            {executingTask === task.id ? "Generating..." : "Preview Message"}
+                            {executingTask === task.id && !taskChannel ? "Generating..." : "Preview Message"}
                           </button>
                           {taskChannel && (
                             <button
@@ -308,7 +330,12 @@ export default function ReviewPage() {
       )}
 
       {/* Review Content */}
-      {!review ? (
+      {generating ? (
+        <div className="text-center py-16 bg-slate-50 rounded-2xl">
+          <div className="w-12 h-12 border-3 border-slate-200 border-t-slate-600 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">Generating your weekly review...</p>
+        </div>
+      ) : !review ? (
         <div className="text-center py-16 bg-slate-50 rounded-2xl">
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 border border-slate-200">
             <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -316,120 +343,132 @@ export default function ReviewPage() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">No review yet</h2>
-          <p className="text-slate-500 mb-6">Generate your first weekly review to see insights here.</p>
+          <p className="text-slate-500 mb-6">Connect Slack and complete the audit to generate reviews.</p>
         </div>
       ) : (
         <div className="space-y-8">
           {/* Top Priorities */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Top Priorities
-            </h2>
-            <div className="space-y-3">
-              {review.topPriorities?.map((item, idx) => (
-                <InsightCard
-                  key={idx}
-                  title={item.text}
-                  category="Priority"
-                  source={item.source}
-                  action={item.action}
-                />
-              ))}
-            </div>
-          </section>
+          {review.topPriorities?.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Top Priorities
+              </h2>
+              <div className="space-y-3">
+                {review.topPriorities.map((item, idx) => (
+                  <InsightCard
+                    key={idx}
+                    title={item.text}
+                    category="Priority"
+                    source={item.source}
+                    action={item.action}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Missed Follow-ups */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Missed Follow-ups
-            </h2>
-            <div className="space-y-3">
-              {review.followUps?.map((item, idx) => (
-                <InsightCard
-                  key={idx}
-                  title={item.text}
-                  category="Follow-up"
-                  source={item.source}
-                  action={item.action}
-                  urgent={item.urgent}
-                />
-              ))}
-            </div>
-          </section>
+          {review.followUps?.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Missed Follow-ups
+              </h2>
+              <div className="space-y-3">
+                {review.followUps.map((item, idx) => (
+                  <InsightCard
+                    key={idx}
+                    title={item.text}
+                    category="Follow-up"
+                    source={item.source}
+                    action={item.action}
+                    urgent={item.urgent}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Blockers */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Stuck Work / Blockers
-            </h2>
-            <div className="space-y-3">
-              {review.blockers?.map((item, idx) => (
-                <InsightCard
-                  key={idx}
-                  title={item.text}
-                  category="Blocker"
-                  source={item.source}
-                  action={item.action}
-                  team={item.team}
-                />
-              ))}
-            </div>
-          </section>
+          {review.blockers?.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Stuck Work / Blockers
+              </h2>
+              <div className="space-y-3">
+                {review.blockers.map((item, idx) => (
+                  <InsightCard
+                    key={idx}
+                    title={item.text}
+                    category="Blocker"
+                    source={item.source}
+                    action={item.action}
+                    team={item.team}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Pending Decisions */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Pending Decisions
-            </h2>
-            <div className="space-y-3">
-              {review.decisions?.map((item, idx) => (
-                <InsightCard
-                  key={idx}
-                  title={item.text}
-                  category="Decision"
-                  source={item.source}
-                  action={item.action}
-                />
-              ))}
-            </div>
-          </section>
+          {review.decisions?.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Pending Decisions
+              </h2>
+              <div className="space-y-3">
+                {review.decisions.map((item, idx) => (
+                  <InsightCard
+                    key={idx}
+                    title={item.text}
+                    category="Decision"
+                    source={item.source}
+                    action={item.action}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Draft Team Update */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Draft Team Update
-            </h2>
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <p className="text-slate-700 leading-relaxed whitespace-pre-line">{review.teamUpdate}</p>
-              <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                <button
-                  onClick={() => navigator.clipboard.writeText(review.teamUpdate)}
-                  className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200"
-                >
-                  Copy
-                </button>
+          {review.teamUpdate && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Draft Team Update
+              </h2>
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <p className="text-slate-700 leading-relaxed whitespace-pre-line">{review.teamUpdate}</p>
+                <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(review.teamUpdate)}
+                    className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200"
+                  >
+                    Copy
+                  </button>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {/* Meeting Agenda */}
-          <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-              Suggested Meeting Agenda
-            </h2>
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <ol className="space-y-3">
-                {review.meetingAgenda?.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-4">
-                    <span className="flex-shrink-0 w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center text-sm font-medium">
-                      {idx + 1}
-                    </span>
-                    <span className="text-slate-700 pt-0.5">{item}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </section>
+          {review.meetingAgenda?.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                Suggested Meeting Agenda
+              </h2>
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <ol className="space-y-3">
+                  {review.meetingAgenda.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-4">
+                      <span className="flex-shrink-0 w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center text-sm font-medium">
+                        {idx + 1}
+                      </span>
+                      <span className="text-slate-700 pt-0.5">{item}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>
