@@ -19,6 +19,9 @@ interface AutomatedTask {
   description: string;
   frequency: string;
   enabled?: boolean;
+  scheduledDay?: string;
+  scheduledTime?: string;
+  active?: boolean;
 }
 
 interface TaskExecution {
@@ -29,6 +32,9 @@ interface TaskExecution {
   channel?: string;
   error?: string;
 }
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const TIMES = ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "2:00 PM", "4:00 PM", "6:00 PM"];
 
 export default function ReviewPage() {
   const [review, setReview] = useState<Review | null>(null);
@@ -81,7 +87,14 @@ export default function ReviewPage() {
 
     const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
     if (company.automatedTasks) {
-      setTasks(company.automatedTasks);
+      // Add default schedule if not set
+      const tasksWithSchedule = company.automatedTasks.map((t: AutomatedTask) => ({
+        ...t,
+        scheduledDay: t.scheduledDay || "Monday",
+        scheduledTime: t.scheduledTime || "9:00 AM",
+        active: t.active !== false,
+      }));
+      setTasks(tasksWithSchedule);
     }
     if (company.companyName) {
       setCompanyName(company.companyName);
@@ -100,13 +113,33 @@ export default function ReviewPage() {
       }
     }
 
-    // Auto-generate review if Slack is connected and no review exists
     const hasSlack = document.cookie.includes("slack_access_token") ||
                      localStorage.getItem("slackConnected") === "true";
     if (!saved && hasSlack) {
       generateReview();
     }
   }, [generateReview]);
+
+  const saveTasks = (updatedTasks: AutomatedTask[]) => {
+    const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
+    company.automatedTasks = updatedTasks;
+    localStorage.setItem("teampulse_company", JSON.stringify(company));
+    setTasks(updatedTasks);
+  };
+
+  const toggleTaskActive = (taskId: string) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, active: !t.active } : t
+    );
+    saveTasks(updated);
+  };
+
+  const updateTaskSchedule = (taskId: string, field: "scheduledDay" | "scheduledTime", value: string) => {
+    const updated = tasks.map((t) =>
+      t.id === taskId ? { ...t, [field]: value } : t
+    );
+    saveTasks(updated);
+  };
 
   const executeTask = async (task: AutomatedTask, postToSlack: boolean = false) => {
     setExecutingTask(task.id);
@@ -130,7 +163,6 @@ export default function ReviewPage() {
 
         if (postToSlack) {
           if (data.slackResult?.success) {
-            // Only save as executed if Slack post succeeded
             const execution: TaskExecution = {
               taskId: task.id,
               executedAt: data.executedAt,
@@ -146,7 +178,6 @@ export default function ReviewPage() {
             setTaskChannel("");
             setPreviewMessage(null);
           } else {
-            // Show error
             setTaskError(data.slackResult?.error || "Failed to post to Slack. Make sure you have reconnected Slack with write permissions.");
           }
         } else {
@@ -167,19 +198,26 @@ export default function ReviewPage() {
   const formatDate = (isoString: string) => {
     return new Date(isoString).toLocaleDateString("en-US", {
       weekday: "long",
-      year: "numeric",
       month: "long",
       day: "numeric",
     });
   };
 
-  const formatTime = (isoString: string) => {
-    return new Date(isoString).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+  const formatLastRun = (isoString: string) => {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return `Today at ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+    } else if (diffDays === 1) {
+      return `Yesterday at ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
   };
 
   const extractChannelFromDescription = (description: string): string | null => {
@@ -211,35 +249,68 @@ export default function ReviewPage() {
               return (
                 <div
                   key={task.id}
-                  className="bg-white rounded-xl border border-slate-200 p-4"
+                  className={`bg-white rounded-xl border p-4 transition-all ${
+                    task.active ? "border-slate-200" : "border-slate-100 opacity-60"
+                  }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="font-medium text-slate-900">{task.title}</h3>
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs">
-                          {task.frequency}
+                        <span className={`px-2 py-0.5 rounded text-xs ${
+                          task.active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"
+                        }`}>
+                          {task.active ? "Active" : "Paused"}
                         </span>
+                      </div>
+                      <p className="text-sm text-slate-500">{task.description}</p>
+
+                      {/* Schedule */}
+                      <div className="flex items-center gap-4 mt-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-400">Scheduled:</span>
+                          <select
+                            value={task.scheduledDay}
+                            onChange={(e) => updateTaskSchedule(task.id, "scheduledDay", e.target.value)}
+                            className="text-xs px-2 py-1 bg-slate-50 border-0 rounded text-slate-700 focus:ring-1 focus:ring-slate-300"
+                          >
+                            {DAYS.map((day) => (
+                              <option key={day} value={day}>{day}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={task.scheduledTime}
+                            onChange={(e) => updateTaskSchedule(task.id, "scheduledTime", e.target.value)}
+                            className="text-xs px-2 py-1 bg-slate-50 border-0 rounded text-slate-700 focus:ring-1 focus:ring-slate-300"
+                          >
+                            {TIMES.map((time) => (
+                              <option key={time} value={time}>{time}</option>
+                            ))}
+                          </select>
+                        </div>
+
                         {execution?.success && (
-                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                            Posted
+                          <span className="text-xs text-slate-400">
+                            Last run: {formatLastRun(execution.executedAt)}
+                            {execution.channel && (
+                              <span className="text-green-600 ml-1">in #{execution.channel}</span>
+                            )}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-slate-500">{task.description}</p>
-                      {execution?.success && (
-                        <p className="text-xs text-slate-400 mt-2">
-                          Last run: {formatTime(execution.executedAt)}
-                          <span className="text-green-600 ml-2">
-                            in #{execution.channel}
-                          </span>
-                        </p>
-                      )}
                     </div>
+
                     <div className="flex items-center gap-2 ml-4">
+                      <button
+                        onClick={() => toggleTaskActive(task.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          task.active
+                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                            : "bg-green-100 text-green-700 hover:bg-green-200"
+                        }`}
+                      >
+                        {task.active ? "Pause" : "Start"}
+                      </button>
                       {selectedTask?.id === task.id ? (
                         <button
                           onClick={() => { setSelectedTask(null); setPreviewMessage(null); setTaskChannel(""); setTaskError(null); }}
@@ -257,7 +328,7 @@ export default function ReviewPage() {
                           }}
                           className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
                         >
-                          Run Task
+                          Run Now
                         </button>
                       )}
                     </div>
