@@ -20,6 +20,14 @@ interface CompanyResearch {
   insights: string[];
 }
 
+interface SuggestedTask {
+  id: string;
+  title: string;
+  description: string;
+  frequency: string;
+  enabled: boolean;
+}
+
 const TEAM_SIZES = [
   { value: "1-5", label: "1-5 people" },
   { value: "6-15", label: "6-15 people" },
@@ -71,7 +79,70 @@ export default function Home() {
   });
   const [research, setResearch] = useState<CompanyResearch | null>(null);
   const [researching, setResearching] = useState(false);
+  const [suggestedTasks, setSuggestedTasks] = useState<SuggestedTask[]>([]);
   const router = useRouter();
+
+  const generateTaskSuggestions = (researchData: CompanyResearch | null): SuggestedTask[] => {
+    const tasks: SuggestedTask[] = [];
+    const industry = researchData?.industry?.toLowerCase() || "";
+    const description = researchData?.description?.toLowerCase() || "";
+
+    tasks.push({
+      id: "weekly-review",
+      title: "Weekly Team Review",
+      description: "Synthesize team updates, blockers, and priorities every week",
+      frequency: "Weekly",
+      enabled: true,
+    });
+
+    tasks.push({
+      id: "followup-tracker",
+      title: "Follow-up Tracker",
+      description: "Track pending follow-ups and remind you before they go stale",
+      frequency: "Daily",
+      enabled: true,
+    });
+
+    if (industry.includes("event") || description.includes("event") || description.includes("conference")) {
+      tasks.push({
+        id: "event-prep",
+        title: "Event Preparation Checklist",
+        description: "Automated checklist and team coordination before each event",
+        frequency: "Per event",
+        enabled: true,
+      });
+    }
+
+    if (industry.includes("agency") || industry.includes("consulting") || description.includes("client") || description.includes("agency")) {
+      tasks.push({
+        id: "client-health",
+        title: "Client Health Check",
+        description: "Weekly pulse on client satisfaction and project status",
+        frequency: "Weekly",
+        enabled: true,
+      });
+    }
+
+    if (industry.includes("saas") || industry.includes("software") || description.includes("product") || description.includes("platform")) {
+      tasks.push({
+        id: "sprint-sync",
+        title: "Sprint Progress Sync",
+        description: "Aggregate engineering updates and flag at-risk deliverables",
+        frequency: "Daily",
+        enabled: true,
+      });
+    }
+
+    tasks.push({
+      id: "decision-log",
+      title: "Decision Tracker",
+      description: "Log pending decisions and surface ones that need your input",
+      frequency: "Continuous",
+      enabled: true,
+    });
+
+    return tasks;
+  };
 
   // Start research when URL is entered (debounced)
   useEffect(() => {
@@ -89,7 +160,10 @@ export default function Home() {
       })
         .then((res) => res.ok ? res.json() : null)
         .then((result) => {
-          if (result) setResearch(result);
+          if (result) {
+            setResearch(result);
+            setSuggestedTasks(generateTaskSuggestions(result));
+          }
         })
         .catch((error) => console.error("Research failed:", error))
         .finally(() => setResearching(false));
@@ -99,15 +173,21 @@ export default function Home() {
   }, [data.companyUrl, data.companyName, research, researching]);
 
   const handleNext = () => {
+    // Generate default tasks when reaching step 5 if not already generated
+    if (step === 4 && suggestedTasks.length === 0) {
+      setSuggestedTasks(generateTaskSuggestions(research));
+    }
     setStep((s) => Math.min(s + 1, 5) as Step);
   };
 
   const handleBack = () => setStep((s) => Math.max(s - 1, 1) as Step);
 
   const handleFinish = () => {
+    const enabledTasks = suggestedTasks.filter((t) => t.enabled);
     localStorage.setItem("teampulse_company", JSON.stringify({
       ...data,
       research,
+      automatedTasks: enabledTasks,
     }));
     router.push("/dashboard");
   };
@@ -122,6 +202,14 @@ export default function Home() {
         ? prev.tools.filter((t) => t !== toolId)
         : [...prev.tools, toolId],
     }));
+  };
+
+  const toggleTask = (taskId: string) => {
+    setSuggestedTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId ? { ...task, enabled: !task.enabled } : task
+      )
+    );
   };
 
   const canProceed = () => {
@@ -378,6 +466,55 @@ export default function Home() {
             {!researching && !research && (
               <div className="p-6 bg-slate-50 rounded-2xl text-center">
                 <p className="text-slate-500">Ready to get started with {data.companyName}</p>
+              </div>
+            )}
+
+            {/* Suggested Tasks */}
+            {!researching && suggestedTasks.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Suggested Tasks</h3>
+                <div className="space-y-2">
+                  {suggestedTasks.map((task) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      onClick={() => toggleTask(task.id)}
+                      className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all text-left border ${
+                        task.enabled
+                          ? "bg-slate-900 border-slate-900 text-white"
+                          : "bg-white border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        task.enabled ? "bg-white border-white" : "border-slate-300"
+                      }`}>
+                        {task.enabled && (
+                          <svg className="w-3 h-3 text-slate-900" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className={`font-medium ${task.enabled ? "text-white" : "text-slate-900"}`}>
+                            {task.title}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            task.enabled ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-500"
+                          }`}>
+                            {task.frequency}
+                          </span>
+                        </div>
+                        <p className={`text-sm mt-0.5 ${task.enabled ? "text-slate-300" : "text-slate-500"}`}>
+                          {task.description}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400 mt-3 text-center">
+                  {suggestedTasks.filter((t) => t.enabled).length} tasks selected. You can adjust these later.
+                </p>
               </div>
             )}
           </div>
