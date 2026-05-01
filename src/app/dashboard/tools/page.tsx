@@ -10,6 +10,7 @@ interface Tool {
   connected: boolean;
   available: boolean;
   teamName?: string;
+  hasWritePermission?: boolean;
 }
 
 const TOOLS: Tool[] = [
@@ -74,10 +75,35 @@ const TOOLS: Tool[] = [
 function ToolsContent() {
   const [tools, setTools] = useState(TOOLS);
   const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
   const searchParams = useSearchParams();
 
+  const checkSlackStatus = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch("/api/slack/status");
+      const data = await res.json();
+
+      setTools((prev) =>
+        prev.map((t) =>
+          t.id === "slack"
+            ? { ...t, connected: data.connected, teamName: data.team }
+            : t
+        )
+      );
+
+      if (data.connected) {
+        localStorage.setItem("slackConnected", "true");
+      }
+    } catch {
+      // Keep current state
+    } finally {
+      setChecking(false);
+    }
+  };
+
   useEffect(() => {
-    const slackConnected = searchParams.get("slack") === "connected";
+    const slackParam = searchParams.get("slack");
     const oauthError = searchParams.get("error");
 
     if (oauthError) {
@@ -91,38 +117,12 @@ function ToolsContent() {
       window.history.replaceState({}, "", "/dashboard/tools");
     }
 
-    if (slackConnected) {
-      localStorage.setItem("slackConnected", "true");
-      const teamName = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("slack_team_name="))
-        ?.split("=")[1];
-
-      setTools((prev) =>
-        prev.map((t) =>
-          t.id === "slack" ? { ...t, connected: true, teamName: teamName ? decodeURIComponent(teamName) : undefined } : t
-        )
-      );
+    if (slackParam === "connected") {
       window.history.replaceState({}, "", "/dashboard/tools");
-      return;
     }
 
-    // Check for existing connection
-    const hasSlackCookie = document.cookie.includes("slack_access_token");
-    const wasConnected = localStorage.getItem("slackConnected") === "true";
-
-    if (hasSlackCookie || wasConnected) {
-      const teamName = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("slack_team_name="))
-        ?.split("=")[1];
-
-      setTools((prev) =>
-        prev.map((t) =>
-          t.id === "slack" ? { ...t, connected: true, teamName: teamName ? decodeURIComponent(teamName) : undefined } : t
-        )
-      );
-    }
+    // Always check actual status from server
+    checkSlackStatus();
   }, [searchParams]);
 
   const connectTool = (id: string) => {
@@ -134,15 +134,18 @@ function ToolsContent() {
     }
   };
 
-  const disconnectTool = (id: string) => {
+  const disconnectTool = async (id: string) => {
     if (id === "slack") {
-      localStorage.removeItem("slackConnected");
-      localStorage.removeItem("slackToken");
-      document.cookie = "slack_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "slack_team_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      setTools((prev) =>
-        prev.map((t) => (t.id === "slack" ? { ...t, connected: false, teamName: undefined } : t))
-      );
+      try {
+        await fetch("/api/slack/disconnect", { method: "POST" });
+        localStorage.removeItem("slackConnected");
+        localStorage.removeItem("teampulse_audit");
+        setTools((prev) =>
+          prev.map((t) => (t.id === "slack" ? { ...t, connected: false, teamName: undefined } : t))
+        );
+      } catch (error) {
+        console.error("Failed to disconnect:", error);
+      }
     }
   };
 
@@ -191,6 +194,8 @@ function ToolsContent() {
                 <div className="mt-3">
                   {!tool.available ? (
                     <span className="text-xs text-slate-400 font-medium">Coming soon</span>
+                  ) : checking && tool.id === "slack" ? (
+                    <span className="text-xs text-slate-400">Checking...</span>
                   ) : tool.connected ? (
                     <div className="flex items-center gap-3">
                       <span className="flex items-center gap-1.5 text-green-600 text-sm font-medium">
@@ -219,6 +224,15 @@ function ToolsContent() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Help text for write permissions */}
+      <div className="mt-8 p-4 bg-blue-50 rounded-xl">
+        <h3 className="text-sm font-medium text-blue-900 mb-1">Need to post messages to Slack?</h3>
+        <p className="text-sm text-blue-700">
+          If tasks fail to post to Slack, disconnect and reconnect to grant write permissions.
+          The app needs the <code className="px-1 py-0.5 bg-blue-100 rounded text-xs">chat:write</code> permission to post messages.
+        </p>
       </div>
     </div>
   );

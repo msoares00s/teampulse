@@ -20,11 +20,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ connected: false, error: authData.error });
     }
 
+    // Check scopes to see if we have write permission
+    const scopesHeader = authResponse.headers.get("x-oauth-scopes") || "";
+    const hasWritePermission = scopesHeader.includes("chat:write");
+
     return NextResponse.json({
       connected: true,
       user: authData.user,
       team: authData.team,
       teamId: authData.team_id,
+      hasWritePermission,
     });
   } catch (error) {
     console.error("Slack status check failed:", error);
