@@ -166,7 +166,7 @@ export default function ReviewPage() {
     <div className="p-8 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Weekly Review</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Workflows</h1>
         <p className="text-slate-500 mt-1">Manage your automated tasks</p>
       </div>
 
