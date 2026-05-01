@@ -14,18 +14,19 @@ interface OnboardingData {
   selectedAgent: string;
 }
 
-interface CompanyResearch {
-  description: string;
-  industry: string;
-  insights: string[];
-}
-
 interface SuggestedTask {
   id: string;
   title: string;
   description: string;
   frequency: string;
   enabled: boolean;
+}
+
+interface CompanyResearch {
+  description: string;
+  industry: string;
+  insights: string[];
+  suggestedTasks?: { id: string; title: string; description: string; frequency: string }[];
 }
 
 const TEAM_SIZES = [
@@ -82,66 +83,38 @@ export default function Home() {
   const [suggestedTasks, setSuggestedTasks] = useState<SuggestedTask[]>([]);
   const router = useRouter();
 
-  const generateTaskSuggestions = (researchData: CompanyResearch | null): SuggestedTask[] => {
-    const tasks: SuggestedTask[] = [];
-    const industry = researchData?.industry?.toLowerCase() || "";
-    const description = researchData?.description?.toLowerCase() || "";
-
-    tasks.push({
-      id: "weekly-review",
-      title: "Weekly Team Review",
-      description: "Synthesize team updates, blockers, and priorities every week",
-      frequency: "Weekly",
-      enabled: true,
-    });
-
-    tasks.push({
-      id: "followup-tracker",
-      title: "Follow-up Tracker",
-      description: "Track pending follow-ups and remind you before they go stale",
-      frequency: "Daily",
-      enabled: true,
-    });
-
-    if (industry.includes("event") || description.includes("event") || description.includes("conference")) {
-      tasks.push({
-        id: "event-prep",
-        title: "Event Preparation Checklist",
-        description: "Automated checklist and team coordination before each event",
-        frequency: "Per event",
+  const processTasksFromResearch = (researchData: CompanyResearch): SuggestedTask[] => {
+    if (researchData.suggestedTasks && researchData.suggestedTasks.length > 0) {
+      return researchData.suggestedTasks.map((task) => ({
+        ...task,
         enabled: true,
-      });
+      }));
     }
 
-    if (industry.includes("agency") || industry.includes("consulting") || description.includes("client") || description.includes("agency")) {
-      tasks.push({
-        id: "client-health",
-        title: "Client Health Check",
-        description: "Weekly pulse on client satisfaction and project status",
+    // Fallback tasks if API doesn't return any
+    return [
+      {
+        id: "weekly-review",
+        title: "Weekly Team Review",
+        description: "Synthesize team updates, blockers, and priorities every week",
         frequency: "Weekly",
         enabled: true,
-      });
-    }
-
-    if (industry.includes("saas") || industry.includes("software") || description.includes("product") || description.includes("platform")) {
-      tasks.push({
-        id: "sprint-sync",
-        title: "Sprint Progress Sync",
-        description: "Aggregate engineering updates and flag at-risk deliverables",
+      },
+      {
+        id: "followup-tracker",
+        title: "Follow-up Tracker",
+        description: "Track pending follow-ups and remind you before they go stale",
         frequency: "Daily",
         enabled: true,
-      });
-    }
-
-    tasks.push({
-      id: "decision-log",
-      title: "Decision Tracker",
-      description: "Log pending decisions and surface ones that need your input",
-      frequency: "Continuous",
-      enabled: true,
-    });
-
-    return tasks;
+      },
+      {
+        id: "decision-log",
+        title: "Decision Tracker",
+        description: "Log pending decisions and surface ones that need your input",
+        frequency: "Continuous",
+        enabled: true,
+      },
+    ];
   };
 
   // Start research when URL is entered (debounced)
@@ -162,7 +135,7 @@ export default function Home() {
         .then((result) => {
           if (result) {
             setResearch(result);
-            setSuggestedTasks(generateTaskSuggestions(result));
+            setSuggestedTasks(processTasksFromResearch(result));
           }
         })
         .catch((error) => console.error("Research failed:", error))
@@ -174,8 +147,8 @@ export default function Home() {
 
   const handleNext = () => {
     // Generate default tasks when reaching step 5 if not already generated
-    if (step === 4 && suggestedTasks.length === 0) {
-      setSuggestedTasks(generateTaskSuggestions(research));
+    if (step === 4 && suggestedTasks.length === 0 && research) {
+      setSuggestedTasks(processTasksFromResearch(research));
     }
     setStep((s) => Math.min(s + 1, 5) as Step);
   };

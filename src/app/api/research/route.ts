@@ -68,9 +68,11 @@ Based on the information above, determine:
 2. What industry are they in? (e.g., "Events & Conferences", "SaaS", "Agency", "E-commerce")
 3. What management challenges would they face?
 
+Based on this specific company, suggest 4-6 automated tasks that would help their founder/manager stay on top of things. Be specific to their industry and business model.
+
 IMPORTANT: Output ONLY raw JSON, no markdown, no code blocks, no explanation. Just the JSON object:
 
-{"description": "2-3 sentence description of what this specific company does based on the website", "industry": "Specific industry name", "insights": ["Specific insight about their business model", "Challenge they likely face", "Key focus area for their type of business"], "suggestedWorkflows": [{"name": "Weekly Review", "reason": "Specific reason for this company"}, {"name": "Follow-up Tracker", "reason": "Specific reason"}], "focusAreas": ["area1", "area2", "area3"]}`,
+{"description": "2-3 sentence description of what this specific company does based on the website", "industry": "Specific industry name", "insights": ["Specific insight about their business model", "Challenge they likely face", "Key focus area for their type of business"], "suggestedTasks": [{"id": "unique-id", "title": "Task name", "description": "What this task does for them", "frequency": "Daily/Weekly/Per event/etc"}], "focusAreas": ["area1", "area2", "area3"]}`,
         },
       ],
     });
