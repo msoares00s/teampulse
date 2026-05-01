@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 interface OnboardingData {
   userName: string;
   companyName: string;
   companyUrl: string;
   teamSize: string;
+  tools: string[];
+  selectedAgent: string;
 }
 
 interface CompanyResearch {
@@ -25,6 +27,38 @@ const TEAM_SIZES = [
   { value: "31-50", label: "31-50 people" },
 ];
 
+const TOOLS = [
+  { id: "slack", name: "Slack", description: "Pull stuck threads and unanswered questions.", available: true },
+  { id: "gmail", name: "Gmail", description: "Surface unread threads and missed replies.", available: false },
+  { id: "notion", name: "Notion", description: "Read project pages and decision docs.", available: false },
+  { id: "jira", name: "Jira", description: "Track tickets blocked or overdue.", available: false },
+  { id: "linear", name: "Linear", description: "Pull issue progress and stalled cycles.", available: false },
+  { id: "hubspot", name: "HubSpot", description: "Watch deals waiting on next steps.", available: false },
+  { id: "pipedrive", name: "Pipedrive", description: "Catch pipeline gaps and stale deals.", available: false },
+  { id: "gcal", name: "Google Calendar", description: "Pull recurring meetings and conflicts.", available: false },
+];
+
+const AGENTS = [
+  {
+    id: "team-management",
+    name: "Team Management Agent",
+    description: "Weekly reviews, follow-ups, blockers, and team alignment",
+    available: true,
+  },
+  {
+    id: "sales",
+    name: "Sales Agent",
+    description: "Pipeline tracking, deal follow-ups, and revenue forecasting",
+    available: false,
+  },
+  {
+    id: "operations",
+    name: "Operations Agent",
+    description: "Resource allocation, capacity planning, and process optimization",
+    available: false,
+  },
+];
+
 export default function Home() {
   const [step, setStep] = useState<Step>(1);
   const [data, setData] = useState<OnboardingData>({
@@ -32,13 +66,21 @@ export default function Home() {
     companyName: "",
     companyUrl: "",
     teamSize: "",
+    tools: [],
+    selectedAgent: "team-management",
   });
   const [research, setResearch] = useState<CompanyResearch | null>(null);
   const [researching, setResearching] = useState(false);
   const router = useRouter();
 
-  const startResearch = () => {
-    if (data.companyUrl && !research && !researching) {
+  // Start research when URL is entered (debounced)
+  useEffect(() => {
+    if (!data.companyUrl || !data.companyName || research || researching) return;
+
+    const isValidUrl = data.companyUrl.startsWith("http");
+    if (!isValidUrl) return;
+
+    const timeout = setTimeout(() => {
       setResearching(true);
       fetch("/api/research", {
         method: "POST",
@@ -47,20 +89,17 @@ export default function Home() {
       })
         .then((res) => res.ok ? res.json() : null)
         .then((result) => {
-          if (result) {
-            setResearch(result);
-          }
+          if (result) setResearch(result);
         })
         .catch((error) => console.error("Research failed:", error))
         .finally(() => setResearching(false));
-    }
-  };
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [data.companyUrl, data.companyName, research, researching]);
 
   const handleNext = () => {
-    if (step === 2 && data.companyUrl && !research && !researching) {
-      startResearch();
-    }
-    setStep((s) => Math.min(s + 1, 3) as Step);
+    setStep((s) => Math.min(s + 1, 5) as Step);
   };
 
   const handleBack = () => setStep((s) => Math.max(s - 1, 1) as Step);
@@ -73,9 +112,23 @@ export default function Home() {
     router.push("/dashboard");
   };
 
+  const toggleTool = (toolId: string) => {
+    const tool = TOOLS.find((t) => t.id === toolId);
+    if (!tool?.available) return;
+
+    setData((prev) => ({
+      ...prev,
+      tools: prev.tools.includes(toolId)
+        ? prev.tools.filter((t) => t !== toolId)
+        : [...prev.tools, toolId],
+    }));
+  };
+
   const canProceed = () => {
     if (step === 1) return data.userName.trim().length > 0;
     if (step === 2) return data.companyName && data.companyUrl && data.teamSize;
+    if (step === 3) return data.tools.length > 0;
+    if (step === 4) return data.selectedAgent;
     return true;
   };
 
@@ -83,7 +136,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-lg mx-auto px-6 py-16">
+      <div className="max-w-xl mx-auto px-6 py-16">
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 mb-8">
@@ -95,18 +148,22 @@ export default function Home() {
           <h1 className="text-3xl font-semibold text-slate-900 mb-3">
             {step === 1 && "Welcome to TeamPulse"}
             {step === 2 && `Hello ${firstName}, tell us about your company`}
-            {step === 3 && "Here's what I found"}
+            {step === 3 && "Which tools do you use?"}
+            {step === 4 && "Choose your agent"}
+            {step === 5 && "Here's what I found"}
           </h1>
           <p className="text-slate-500">
             {step === 1 && "Let's get to know you first."}
             {step === 2 && "We'll research your company to personalize your experience."}
-            {step === 3 && research && `About ${data.companyName}`}
+            {step === 3 && "Pick the ones we should pull signals from."}
+            {step === 4 && "Select an AI agent to help manage your team."}
+            {step === 5 && research && `About ${data.companyName}`}
           </p>
         </div>
 
         {/* Progress */}
         <div className="flex gap-2 mb-10">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4, 5].map((s) => (
             <div
               key={s}
               className={`h-1 flex-1 rounded-full transition-colors ${
@@ -162,6 +219,20 @@ export default function Home() {
                 placeholder="https://example.com"
                 className="w-full px-4 py-3 bg-slate-50 border-0 rounded-xl text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-slate-900"
               />
+              {researching && (
+                <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1">
+                  <span className="w-3 h-3 border-2 border-blue-300 border-t-blue-500 rounded-full animate-spin" />
+                  Researching your company...
+                </p>
+              )}
+              {research && !researching && (
+                <p className="text-xs text-green-600 mt-1.5 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Research complete
+                </p>
+              )}
             </div>
 
             <div>
@@ -188,13 +259,93 @@ export default function Home() {
           </div>
         )}
 
-        {/* Step 3: Research Results */}
+        {/* Step 3: Tools */}
         {step === 3 && (
+          <div className="grid grid-cols-2 gap-3">
+            {TOOLS.map((tool) => (
+              <button
+                key={tool.id}
+                type="button"
+                onClick={() => toggleTool(tool.id)}
+                disabled={!tool.available}
+                className={`relative p-4 rounded-xl text-left transition-all border-2 ${
+                  !tool.available
+                    ? "bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed"
+                    : data.tools.includes(tool.id)
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "bg-white border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <h3 className={`font-semibold ${data.tools.includes(tool.id) && tool.available ? "text-white" : "text-slate-900"}`}>
+                    {tool.name}
+                  </h3>
+                  {data.tools.includes(tool.id) && tool.available && (
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <p className={`text-sm mt-1 ${
+                  data.tools.includes(tool.id) && tool.available ? "text-slate-300" : "text-slate-500"
+                }`}>
+                  {tool.description}
+                </p>
+                {!tool.available && (
+                  <span className="absolute top-2 right-2 text-xs text-slate-400">Soon</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Step 4: Agent Selection */}
+        {step === 4 && (
+          <div className="space-y-3">
+            {AGENTS.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => agent.available && setData({ ...data, selectedAgent: agent.id })}
+                disabled={!agent.available}
+                className={`w-full flex items-start gap-4 px-5 py-4 rounded-xl transition-all text-left border-2 ${
+                  !agent.available
+                    ? "bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed"
+                    : data.selectedAgent === agent.id
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "bg-white border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className={`font-semibold ${data.selectedAgent === agent.id && agent.available ? "text-white" : "text-slate-900"}`}>
+                      {agent.name}
+                    </h3>
+                    {!agent.available && (
+                      <span className="text-xs text-slate-400">Coming soon</span>
+                    )}
+                    {agent.available && data.selectedAgent === agent.id && (
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <p className={`text-sm mt-1 ${data.selectedAgent === agent.id && agent.available ? "text-slate-300" : "text-slate-500"}`}>
+                    {agent.description}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Step 5: Research Results */}
+        {step === 5 && (
           <div className="space-y-6">
             {researching && (
               <div className="p-6 bg-slate-50 rounded-2xl flex items-center justify-center gap-3">
                 <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                <p className="text-slate-600">Analyzing {data.companyName}...</p>
+                <p className="text-slate-600">Finishing analysis of {data.companyName}...</p>
               </div>
             )}
 
@@ -245,7 +396,7 @@ export default function Home() {
             <div />
           )}
 
-          {step < 3 ? (
+          {step < 5 ? (
             <button
               onClick={handleNext}
               disabled={!canProceed()}
