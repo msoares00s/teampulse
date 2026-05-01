@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 72" width="380" height="72" fill="none">
+  <defs>
+    
+  </defs>
+
+  
+  
+  <circle cx="36" cy="36" r="14.4" stroke="#111111" stroke-width="1.056" opacity="0.12"></circle>
+  
+  
+  
+  <line x1="36" y1="21.6" x2="23.53" y2="43.2" stroke="#111111" stroke-width="1.344" stroke-linecap="round" opacity="0.25"></line>
+  <line x1="23.53" y1="43.2" x2="48.47" y2="43.2" stroke="#111111" stroke-width="1.344" stroke-linecap="round" opacity="0.25"></line>
+  <line x1="48.47" y1="43.2" x2="36" y2="21.6" stroke="#111111" stroke-width="1.344" stroke-linecap="round" opacity="0.25"></line>
+  
+  <circle cx="36" cy="21.6" r="4.32" fill="#111111"></circle>
+  <circle cx="23.53" cy="43.2" r="4.32" fill="#111111"></circle>
+  <circle cx="48.47" cy="43.2" r="4.32" fill="#111111"></circle>
+  
+  <circle cx="36" cy="36" r="2.376" fill="#111111" opacity="0.45"></circle>
+
+  
+  <text x="84" y="46" font-family="&#39;DM Sans&#39;, Helvetica Neue, Arial, sans-serif" font-weight="600" font-size="32" letter-spacing="-1" fill="#111111" dominant-baseline="auto">Team</text>
+  <text x="179" y="46" font-family="&#39;DM Sans&#39;, Helvetica Neue, Arial, sans-serif" font-weight="300" font-size="32" letter-spacing="-0.5" fill="#111111" dominant-baseline="auto">Pulse</text>
+</svg>

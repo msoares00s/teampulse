@@ -2,25 +2,31 @@
 
 import { useState, useEffect } from "react";
 
+interface CompanyResearch {
+  description: string;
+  industry: string;
+  insights: string[];
+}
+
 interface Settings {
   companyName: string;
+  companyUrl: string;
   teamSize: string;
-  companyType: string;
   reviewDay: string;
   reviewTime: string;
   readOnlyMode: boolean;
+  research?: CompanyResearch;
 }
 
 const TEAM_SIZES = ["1-5", "6-15", "16-30", "31-50"];
-const COMPANY_TYPES = ["Solo Founder", "Agency", "Consultancy", "Studio", "Product Company", "Service Business"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const TIMES = ["8:00 AM", "9:00 AM", "10:00 AM", "2:00 PM", "4:00 PM"];
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
     companyName: "",
+    companyUrl: "",
     teamSize: "6-15",
-    companyType: "Product Company",
     reviewDay: "Monday",
     reviewTime: "9:00 AM",
     readOnlyMode: true,
@@ -32,17 +38,22 @@ export default function SettingsPage() {
     if (company.companyName) {
       setSettings({
         companyName: company.companyName || "",
+        companyUrl: company.companyUrl || "",
         teamSize: company.teamSize || "6-15",
-        companyType: company.companyType || "Product Company",
         reviewDay: company.reviewDay || "Monday",
         reviewTime: company.reviewTime || "9:00 AM",
         readOnlyMode: company.readOnlyMode ?? true,
+        research: company.research,
       });
     }
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem("teampulse_company", JSON.stringify(settings));
+    const existing = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
+    localStorage.setItem("teampulse_company", JSON.stringify({
+      ...existing,
+      ...settings,
+    }));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -75,6 +86,19 @@ export default function SettingsPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
+                Website
+              </label>
+              <input
+                type="url"
+                value={settings.companyUrl}
+                onChange={(e) => setSettings({ ...settings, companyUrl: e.target.value })}
+                placeholder="https://example.com"
+                className="w-full px-4 py-2.5 bg-slate-50 border-0 rounded-lg text-slate-900 focus:ring-2 focus:ring-slate-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Team size
               </label>
               <select
@@ -87,23 +111,40 @@ export default function SettingsPage() {
                 ))}
               </select>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Company type
-              </label>
-              <select
-                value={settings.companyType}
-                onChange={(e) => setSettings({ ...settings, companyType: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border-0 rounded-lg text-slate-900 focus:ring-2 focus:ring-slate-900"
-              >
-                {COMPANY_TYPES.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
           </div>
         </section>
+
+        {/* Company Research */}
+        {settings.research && (
+          <section className="bg-white rounded-xl border border-slate-200 p-6">
+            <h2 className="font-semibold text-slate-900 mb-4">Company Profile</h2>
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <p className="text-blue-800 text-sm leading-relaxed">
+                  {settings.research.description}
+                </p>
+                <div className="mt-3 pt-3 border-t border-blue-100">
+                  <span className="text-xs font-medium text-blue-600">Industry: </span>
+                  <span className="text-xs text-blue-700">{settings.research.industry}</span>
+                </div>
+              </div>
+
+              {settings.research.insights && settings.research.insights.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-slate-700 mb-2">Key Insights</h3>
+                  <ul className="space-y-2">
+                    {settings.research.insights.map((insight, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 flex-shrink-0" />
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Review Schedule */}
         <section className="bg-white rounded-xl border border-slate-200 p-6">

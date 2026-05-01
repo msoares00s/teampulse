@@ -17,7 +17,9 @@
       "PowerShell($response = Invoke-WebRequest -Uri \"http://localhost:3000/api/oauth/slack\" -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing; $response.Headers.Location)",
       "PowerShell(vercel *)",
       "PowerShell(gh auth *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git push *)"
     ]
   }
 }
