@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [suggestedTasks, setSuggestedTasks] = useState<AutomatedTask[]>([]);
   const [generatingTasks, setGeneratingTasks] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
   const [tasksConfigured, setTasksConfigured] = useState(false);
 
   useEffect(() => {
@@ -124,6 +125,7 @@ export default function Dashboard() {
 
   const generateTaskSuggestions = async (auditData: SlackAudit) => {
     setGeneratingTasks(true);
+    setTaskError(null);
     try {
       const res = await fetch("/api/tasks/suggest", {
         method: "POST",
@@ -137,14 +139,20 @@ export default function Dashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.tasks) {
+        if (data.tasks && data.tasks.length > 0) {
           setSuggestedTasks(
             data.tasks.map((t: Omit<AutomatedTask, 'enabled'>) => ({ ...t, enabled: true }))
           );
+        } else {
+          setTaskError("No tasks were generated. Try again.");
         }
+      } else {
+        const error = await res.json();
+        setTaskError(error.error || "Failed to generate suggestions");
       }
     } catch (error) {
       console.error("Failed to generate task suggestions:", error);
+      setTaskError("Failed to connect to server");
     } finally {
       setGeneratingTasks(false);
     }
@@ -301,14 +309,30 @@ export default function Dashboard() {
                     ? "Analyzing your workspace and generating suggestions..."
                     : tasksConfigured
                     ? `${tasks.length} tasks configured`
-                    : "Review and enable automated tasks based on your workspace"}
+                    : suggestedTasks.length > 0
+                    ? "Review the suggested tasks below"
+                    : "Generate task suggestions based on your workspace"}
                 </p>
               </div>
+              {auditComplete && !tasksConfigured && !generatingTasks && suggestedTasks.length === 0 && (
+                <button
+                  onClick={() => audit && generateTaskSuggestions(audit)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+                >
+                  Generate Suggestions
+                </button>
+              )}
             </div>
 
             {auditError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-700">{auditError}</p>
+              </div>
+            )}
+
+            {taskError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{taskError}</p>
               </div>
             )}
           </div>
