@@ -69,8 +69,8 @@ export default function Sidebar({ companyName }: SidebarProps) {
             <Image
               src="/logo.svg"
               alt="TeamPulse"
-              width={140}
-              height={28}
+              width={170}
+              height={34}
               priority
             />
           </Link>

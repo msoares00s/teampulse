@@ -19,7 +19,9 @@
       "PowerShell(gh auth *)",
       "Bash(git add *)",
       "Bash(git commit -m '@ *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git commit -m 'Replace logo with TeamPulse SVG *)",
+      "Bash(git commit *)"
     ]
   }
 }
