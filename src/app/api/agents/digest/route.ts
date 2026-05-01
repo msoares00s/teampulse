@@ -71,9 +71,18 @@ Be specific, actionable, and reference actual people and channels. Prioritize by
     const content = message.content[0];
     if (content.type === "text") {
       try {
-        return NextResponse.json(JSON.parse(content.text));
-      } catch {
+        let jsonText = content.text.trim();
+
+        // Extract JSON from markdown code blocks if present
+        const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[1].trim();
+        }
+
+        return NextResponse.json(JSON.parse(jsonText));
+      } catch (parseError) {
         console.error("Failed to parse response:", content.text);
+        console.error("Parse error:", parseError);
         return NextResponse.json({ error: "Failed to parse review" }, { status: 500 });
       }
     }
@@ -81,6 +90,7 @@ Be specific, actionable, and reference actual people and channels. Prioritize by
     return NextResponse.json({ error: "Unexpected response" }, { status: 500 });
   } catch (error) {
     console.error("Digest API error:", error);
-    return NextResponse.json({ error: "Failed to generate review" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: `Failed to generate review: ${errorMessage}` }, { status: 500 });
   }
 }
