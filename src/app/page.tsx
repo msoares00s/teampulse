@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -200,11 +201,14 @@ export default function Home() {
       <div className="max-w-xl mx-auto px-6 py-16">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold">T</span>
-            </div>
-            <span className="text-xl font-semibold text-slate-900">TeamPulse</span>
+          <div className="inline-block mb-8">
+            <Image
+              src="/logo.svg"
+              alt="TeamPulse"
+              width={180}
+              height={36}
+              priority
+            />
           </div>
           <h1 className="text-3xl font-semibold text-slate-900 mb-3">
             {step === 1 && "Welcome to TeamPulse"}

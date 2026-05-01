@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navigation = [
@@ -64,11 +65,14 @@ export default function Sidebar({ companyName }: SidebarProps) {
       <div className="flex flex-col h-full">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-slate-100">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">T</span>
-            </div>
-            <span className="text-lg font-semibold text-slate-900">TeamPulse</span>
+          <Link href="/dashboard">
+            <Image
+              src="/logo.svg"
+              alt="TeamPulse"
+              width={140}
+              height={28}
+              priority
+            />
           </Link>
         </div>
 
