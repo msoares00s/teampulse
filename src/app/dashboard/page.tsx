@@ -72,8 +72,11 @@ export default function Dashboard() {
     window.location.href = "/api/oauth/slack";
   };
 
+  const [error, setError] = useState<string | null>(null);
+
   const generateReview = async () => {
     setGenerating(true);
+    setError(null);
     try {
       const company = JSON.parse(localStorage.getItem("teampulse_company") || "{}");
       const res = await fetch("/api/agents/digest", {
@@ -90,11 +93,19 @@ export default function Dashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        setReview(data);
-        localStorage.setItem("teampulse_review", JSON.stringify(data));
+        if (data.error) {
+          setError(data.error);
+        } else {
+          setReview(data);
+          localStorage.setItem("teampulse_review", JSON.stringify(data));
+        }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        setError(errorData.error || `Failed to generate review (${res.status})`);
       }
-    } catch (error) {
-      console.error("Failed to generate review:", error);
+    } catch (err) {
+      console.error("Failed to generate review:", err);
+      setError("Failed to connect to the server");
     } finally {
       setGenerating(false);
     }
@@ -124,6 +135,18 @@ export default function Dashboard() {
           </button>
         )}
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+          <p className="text-sm text-red-700">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Active Automations */}
       {companyData?.automatedTasks && companyData.automatedTasks.length > 0 && (
